@@ -2708,11 +2708,48 @@ final class Workspace: Identifiable, ObservableObject {
     }
 
     private static func bonsplitAppearance(from config: GhosttyConfig) -> BonsplitConfiguration.Appearance {
-        bonsplitAppearance(
+        var appearance = bonsplitAppearance(
             from: config.backgroundColor,
             backgroundOpacity: config.backgroundOpacity,
             tabTitleFontSize: config.surfaceTabBarFontSize
         )
+        Self.applySurfaceTabConfigOverrides(to: &appearance, from: config)
+        return appearance
+    }
+
+    /// custom-ui: hex for a config color, including alpha only when not fully opaque.
+    nonisolated static func surfaceTabHex(_ color: NSColor) -> String {
+        color.hexString(includeAlpha: color.alphaComponent < 0.999)
+    }
+
+    /// custom-ui: apply surface-tab-* ghostty config overrides onto bonsplit chrome colors.
+    nonisolated static func applySurfaceTabChromeOverrides(
+        _ chrome: inout BonsplitConfiguration.Appearance.ChromeColors,
+        from config: GhosttyConfig
+    ) {
+        if let color = config.surfaceTabBarBackground {
+            chrome.tabBarBackgroundHex = surfaceTabHex(color)
+        }
+        if let color = config.surfaceTabBorderColor {
+            chrome.borderHex = surfaceTabHex(color)
+        }
+        if let color = config.surfaceTabActiveIndicatorColor {
+            chrome.activeIndicatorHex = surfaceTabHex(color)
+        }
+    }
+
+    /// custom-ui: apply all surface-tab-* overrides onto a full bonsplit appearance.
+    nonisolated static func applySurfaceTabConfigOverrides(
+        to appearance: inout BonsplitConfiguration.Appearance,
+        from config: GhosttyConfig
+    ) {
+        applySurfaceTabChromeOverrides(&appearance.chromeColors, from: config)
+        if let height = config.surfaceTabActiveIndicatorHeight {
+            appearance.activeIndicatorHeight = height
+        }
+        if let alwaysColored = config.surfaceTabActiveIndicatorAlwaysColored {
+            appearance.activeIndicatorAlwaysColored = alwaysColored
+        }
     }
 
     nonisolated static func usesSharedSurfaceBackdrop(defaults: UserDefaults = .standard) -> Bool {
@@ -2831,7 +2868,8 @@ final class Workspace: Identifiable, ObservableObject {
             lhs.tabBarBackgroundHex == rhs.tabBarBackgroundHex &&
             lhs.splitButtonBackdropHex == rhs.splitButtonBackdropHex &&
             lhs.paneBackgroundHex == rhs.paneBackgroundHex &&
-            lhs.borderHex == rhs.borderHex
+            lhs.borderHex == rhs.borderHex &&
+            lhs.activeIndicatorHex == rhs.activeIndicatorHex
     }
 
     private static func bonsplitChromeColorsLogDescription(
@@ -2875,12 +2913,13 @@ final class Workspace: Identifiable, ObservableObject {
         let renderingMode = WindowAppearanceSnapshot.terminalRenderingMode(
             usesHostLayerBackground: GhosttyApp.shared.usesHostLayerBackground
         )
-        let nextChromeColors = Self.bonsplitChromeColors(
+        var nextChromeColors = Self.bonsplitChromeColors(
             backgroundColor: config.backgroundColor,
             backgroundOpacity: config.backgroundOpacity,
             sharesWindowBackdrop: sharesWindowBackdrop,
             renderingMode: renderingMode
         )
+        Self.applySurfaceTabChromeOverrides(&nextChromeColors, from: config)
         let nextTabTitleFontSize = config.surfaceTabBarFontSize
         let currentAppearance = bonsplitController.configuration.appearance
         let currentTabTitleFontSize = currentAppearance.tabTitleFontSize
@@ -2890,7 +2929,13 @@ final class Workspace: Identifiable, ObservableObject {
         )
         let sharedBackdropChanged = currentAppearance.usesSharedBackdrop != sharesWindowBackdrop
         let fontSizeChanged = abs(currentTabTitleFontSize - nextTabTitleFontSize) > 0.0001
-        let isNoOp = !colorsChanged && !sharedBackdropChanged && !fontSizeChanged
+        // custom-ui: active indicator height / always-colored from config
+        let nextIndicatorHeight = config.surfaceTabActiveIndicatorHeight ?? 1.5
+        let nextIndicatorAlwaysColored = config.surfaceTabActiveIndicatorAlwaysColored ?? false
+        let indicatorChanged =
+            abs(currentAppearance.activeIndicatorHeight - nextIndicatorHeight) > 0.0001
+            || currentAppearance.activeIndicatorAlwaysColored != nextIndicatorAlwaysColored
+        let isNoOp = !colorsChanged && !sharedBackdropChanged && !fontSizeChanged && !indicatorChanged
 
         if GhosttyApp.shared.backgroundLogEnabled {
             GhosttyApp.shared.logBackground(
@@ -2916,6 +2961,10 @@ final class Workspace: Identifiable, ObservableObject {
         }
         if fontSizeChanged {
             bonsplitController.configuration.appearance.tabTitleFontSize = nextTabTitleFontSize
+        }
+        if indicatorChanged {
+            bonsplitController.configuration.appearance.activeIndicatorHeight = nextIndicatorHeight
+            bonsplitController.configuration.appearance.activeIndicatorAlwaysColored = nextIndicatorAlwaysColored
         }
 
         if GhosttyApp.shared.backgroundLogEnabled {

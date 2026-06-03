@@ -128,6 +128,16 @@ public struct GhosttyConfig {
     /// The sidebar tint opacity (0...1), or `nil` when unset.
     public var sidebarTintOpacity: Double?
 
+    // Surface (top) tab bar appearance — custom-ui overrides (drive bonsplit)
+    public var surfaceTabBarBackground: NSColor?
+    public var surfaceTabBorderColor: NSColor?
+    public var surfaceTabActiveIndicatorColor: NSColor?
+    public var surfaceTabActiveIndicatorHeight: CGFloat?
+    public var surfaceTabActiveIndicatorAlwaysColored: Bool?
+    public var surfaceTabActiveBackground: NSColor?
+    // Whole top-chrome (titlebar + tab bar) height. Applies on relaunch.
+    public var surfaceTabBarHeight: CGFloat?
+
     /// The 16-color ANSI palette, indexed 0...15.
     public var palette: [Int: NSColor] = [:]
 
@@ -621,6 +631,40 @@ public struct GhosttyConfig {
                 case "sidebar-tint-opacity":
                     if let opacity = Double(value) {
                         sidebarTintOpacity = min(max(opacity, 0), 1)
+                    }
+                case "surface-tab-bar-background":
+                    if let color = NSColor(hex: value) {
+                        surfaceTabBarBackground = color
+                    }
+                case "surface-tab-border-color":
+                    if let color = NSColor(hex: value) {
+                        surfaceTabBorderColor = color
+                    }
+                case "surface-tab-active-indicator-color":
+                    if let color = NSColor(hex: value) {
+                        surfaceTabActiveIndicatorColor = color
+                    }
+                case "surface-tab-active-indicator-height":
+                    if let height = Double(value), height.isFinite {
+                        surfaceTabActiveIndicatorHeight = CGFloat(min(max(height, 0), 12))
+                    }
+                case "surface-tab-active-indicator-always-colored":
+                    surfaceTabActiveIndicatorAlwaysColored = (value.lowercased() == "true")
+                case "surface-tab-active-background":
+                    if let color = NSColor(hex: value) {
+                        surfaceTabActiveBackground = color
+                    }
+                case "surface-tab-bar-height":
+                    if let height = Double(value), height.isFinite {
+                        let clamped = min(max(height, 28), 72)
+                        surfaceTabBarHeight = CGFloat(clamped)
+                        // Persist so WindowChromeMetrics (read at window creation)
+                        // picks it up on the next launch/relaunch. Key must match
+                        // WindowChromeMetrics.chromeBarHeightDefaultsKey (app target).
+                        UserDefaults.standard.set(
+                            clamped,
+                            forKey: "cmuxSurfaceTabBarHeight"
+                        )
                     }
                 default:
                     break

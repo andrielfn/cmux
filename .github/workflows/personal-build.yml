@@ -1,0 +1,100 @@
+name: Personal Build (custom-ui)
+
+# Builds an unsigned, ad-hoc-signed cmux.app from this fork's custom-ui branch
+# and uploads it as a workflow artifact. No Apple signing / notarization /
+# Sparkle / R2 upload (those need secrets we don't have). Personal use only.
+
+on:
+  push:
+    branches: [custom-ui]
+    paths-ignore:
+      - "**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout (recursive submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Select latest Xcode
+        run: |
+          set -euo pipefail
+          XCODE_APP="$(find /Applications -maxdepth 1 -name 'Xcode*.app' | sort | tail -n 1)"
+          echo "Using $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+          xcodebuild -version
+
+      - name: Install Zig (for the Ghostty CLI helper build phase)
+        run: ./scripts/install-zig-ci.sh
+
+      - name: Install Rust (for the command-palette nucleo FFI)
+        run: |
+          set -euo pipefail
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" target add aarch64-apple-darwin
+
+      - name: Download prebuilt GhosttyKit.xcframework
+        run: ./scripts/download-prebuilt-ghosttykit.sh
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .spm-cache
+          key: spm-${{ hashFiles('cmux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-
+
+      - name: Build cmux.app (Release, arm64, unsigned)
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          CMUX_SKIP_ZIG_BUILD=1 xcodebuild \
+            -scheme cmux \
+            -configuration Release \
+            -derivedDataPath build-universal \
+            -destination 'generic/platform=macOS' \
+            -clonedSourcePackagesDirPath .spm-cache \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Ad-hoc codesign (so it launches locally)
+        run: |
+          set -euo pipefail
+          APP="build-universal/Build/Products/Release/cmux.app"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP" || true
+
+      - name: Package app
+        run: |
+          set -euo pipefail
+          APP="build-universal/Build/Products/Release/cmux.app"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" cmux-custom-ui.zip
+          ls -lh cmux-custom-ui.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmux-custom-ui-app
+          path: cmux-custom-ui.zip
+          retention-days: 14
+          if-no-files-found: error
