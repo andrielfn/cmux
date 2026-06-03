@@ -1,14 +1,26 @@
 import CmuxFoundation
 import CoreGraphics
+import Foundation
 
 enum WindowChromeMetrics {
-    static let sharedChromeBarHeight: CGFloat = 28
-    static let appTitlebarHeight: CGFloat = sharedChromeBarHeight
-    static let bonsplitTabBarHeight: CGFloat = sharedChromeBarHeight
-    static let secondaryTitlebarHeight: CGFloat = sharedChromeBarHeight
-    static let minimumTitlebarHeight: CGFloat = sharedChromeBarHeight
+    // custom-ui: top-chrome height is configurable via the ghostty config key
+    // `surface-tab-bar-height`, which GhosttyConfig persists to this UserDefaults
+    // key on load. Read at window-creation time, so changes apply on relaunch.
+    static let chromeBarHeightDefaultsKey = "cmuxSurfaceTabBarHeight"
+    static let baseChromeBarHeight: CGFloat = 28
     static let maximumTitlebarHeight: CGFloat = 72
-    static let defaultTitlebarHeight: CGFloat = sharedChromeBarHeight
+
+    static var sharedChromeBarHeight: CGFloat {
+        let stored = UserDefaults.standard.double(forKey: chromeBarHeightDefaultsKey)
+        guard stored > 0 else { return baseChromeBarHeight }
+        return max(baseChromeBarHeight, min(maximumTitlebarHeight, CGFloat(stored)))
+    }
+
+    static var appTitlebarHeight: CGFloat { sharedChromeBarHeight }
+    static var bonsplitTabBarHeight: CGFloat { sharedChromeBarHeight }
+    static var secondaryTitlebarHeight: CGFloat { sharedChromeBarHeight }
+    static var minimumTitlebarHeight: CGFloat { sharedChromeBarHeight }
+    static var defaultTitlebarHeight: CGFloat { sharedChromeBarHeight }
 
     static func clampedTitlebarHeight(_ height: CGFloat) -> CGFloat {
         max(minimumTitlebarHeight, min(maximumTitlebarHeight, height))
