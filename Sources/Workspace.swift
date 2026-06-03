@@ -2730,6 +2730,9 @@ final class Workspace: Identifiable, ObservableObject {
         if let color = config.surfaceTabBarBackground {
             chrome.tabBarBackgroundHex = surfaceTabHex(color)
         }
+        if let color = config.surfaceTabActiveBackground {
+            chrome.activeTabBackgroundHex = surfaceTabHex(color)
+        }
         if let color = config.surfaceTabBorderColor {
             chrome.borderHex = surfaceTabHex(color)
         }
@@ -2869,7 +2872,8 @@ final class Workspace: Identifiable, ObservableObject {
             lhs.splitButtonBackdropHex == rhs.splitButtonBackdropHex &&
             lhs.paneBackgroundHex == rhs.paneBackgroundHex &&
             lhs.borderHex == rhs.borderHex &&
-            lhs.activeIndicatorHex == rhs.activeIndicatorHex
+            lhs.activeIndicatorHex == rhs.activeIndicatorHex &&
+            lhs.activeTabBackgroundHex == rhs.activeTabBackgroundHex
     }
 
     private static func bonsplitChromeColorsLogDescription(
